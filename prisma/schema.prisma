@@ -1,0 +1,21 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  // Stable OIDC subject identifier from eSignet (the "sub" claim). Null for users
+  // created outside the eSignet login flow (e.g. via the plain POST /api/users
+  // example endpoint); set and unique for anyone who has signed in via eSignet.
+  sub       String?  @unique
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
