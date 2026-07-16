@@ -1,6 +1,10 @@
 # Render Blueprint — see https://render.com/docs/blueprint-spec
-# `plan` values (free / basic-256mb below) reflect Render's offering at the
-# time this was written; check the dashboard if Render rejects either on apply.
+# `plan: free` reflects Render's offering at the time this was written; check
+# the dashboard if Render rejects it on apply.
+#
+# Postgres is NOT provisioned here: Render's managed Postgres has no free
+# plan, so this points at an external free-tier Postgres instead (e.g. Neon,
+# Supabase) — set DATABASE_URL to its connection string when prompted below.
 services:
   - name: esignet-backend
     type: web
@@ -14,10 +18,15 @@ services:
         value: production
       - key: LOG_LEVEL
         value: info
+      # Connection string from your external Postgres provider (Neon, Supabase,
+      # etc.). If using Supabase, use the "Session pooler" host, not the direct
+      # "db.<ref>.supabase.co" one (IPv6-only, often unreachable). Append
+      # ?sslmode=require&uselibpqcompat=true — without uselibpqcompat, current
+      # pg treats sslmode=require as full cert verification, which fails
+      # against most managed Postgres providers' certs ("self-signed
+      # certificate in certificate chain").
       - key: DATABASE_URL
-        fromDatabase:
-          name: esignet-db
-          property: connectionString
+        sync: false
 
       # Your deployed frontend's origin, e.g. https://your-app.vercel.app —
       # set after the frontend is deployed.
@@ -56,10 +65,3 @@ services:
       # Render generates and stores this random value itself on first deploy.
       - key: ESIGNET_SESSION_SECRET
         generateValue: true
-
-databases:
-  - name: esignet-db
-    plan: basic-256mb
-    postgresMajorVersion: "17"
-    databaseName: esignet
-    user: esignet
