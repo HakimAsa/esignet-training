@@ -19,7 +19,14 @@ const PUBLIC_DIR = path.join(import.meta.dirname, "../public");
 export function createApp() {
   const app = express();
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      // Public assets (e.g. the logo in /public) are meant to be embedded
+      // (<img>) on other origins — Helmet's default "same-origin" CORP blocks
+      // exactly that (browser console: ERR_BLOCKED_BY_RESPONSE.NotSameOrigin).
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    }),
+  );
   app.use(cors({ origin: env.CORS_ORIGIN }));
   app.use(compression());
   app.use(express.static(PUBLIC_DIR));
