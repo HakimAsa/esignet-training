@@ -1,5 +1,7 @@
 # esignet-backend
 
+Ici c'est la formation des intégrations de esignet pour la république du bénin
+
 Express + TypeScript API backed by Postgres (via Prisma).
 
 ## Stack
