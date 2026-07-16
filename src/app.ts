@@ -27,7 +27,11 @@ export function createApp() {
       crossOriginResourcePolicy: { policy: "cross-origin" },
     }),
   );
-  app.use(cors({ origin: env.CORS_ORIGIN }));
+  // credentials: true is required for the browser to store/send the
+  // esignet_oauth and session cookies on cross-origin requests from the
+  // frontend — without it, browsers silently drop Set-Cookie on cross-origin
+  // responses even if the frontend fetch uses credentials: "include".
+  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
   app.use(compression());
   app.use(express.static(PUBLIC_DIR));
   app.use(express.json());
