@@ -1,0 +1,65 @@
+# Render Blueprint — see https://render.com/docs/blueprint-spec
+# `plan` values (free / basic-256mb below) reflect Render's offering at the
+# time this was written; check the dashboard if Render rejects either on apply.
+services:
+  - name: esignet-backend
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./prod.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esignet-db
+          property: connectionString
+
+      # Your deployed frontend's origin, e.g. https://your-app.vercel.app —
+      # set after the frontend is deployed.
+      - key: CORS_ORIGIN
+        sync: false
+
+      # eSignet (MOSIP) OIDC client config — see README.md's "eSignet (MOSIP)
+      # login" section. Static endpoint URLs are safe to hardcode (not secret);
+      # the client-specific values below must be filled in per environment.
+      - key: ESIGNET_ISSUER
+        value: https://esignet.benin.mosip.net
+      - key: ESIGNET_TOKEN_URL
+        value: https://esignet.benin.mosip.net/v1/esignet/oauth/v2/token
+      - key: ESIGNET_USERINFO_URL
+        value: https://esignet.benin.mosip.net/v1/esignet/oidc/userinfo
+      - key: ESIGNET_JWKS_URL
+        value: https://esignet.benin.mosip.net/.well-known/jwks.json
+      - key: ESIGNET_ALLOW_UNVERIFIED_USERINFO
+        value: "false"
+
+      # Must exactly match what's registered with eSignet as this client's
+      # redirect_uri — i.e. https://<this-service>.onrender.com/auth/callback
+      # (or your custom domain). Render assigns the .onrender.com URL on first
+      # deploy, so this can only be set for real once that's known.
+      - key: ESIGNET_REDIRECT_URI
+        sync: false
+      - key: ESIGNET_CLIENT_ID
+        sync: false
+      # PKCS8 PEM — see `npm run esignet:generate-key`. Paste with real
+      # newlines; Render's dashboard textarea preserves them.
+      - key: ESIGNET_PRIVATE_KEY
+        sync: false
+      - key: ESIGNET_KEY_ID
+        sync: false
+
+      # Render generates and stores this random value itself on first deploy.
+      - key: ESIGNET_SESSION_SECRET
+        generateValue: true
+
+databases:
+  - name: esignet-db
+    plan: basic-256mb
+    postgresMajorVersion: "17"
+    databaseName: esignet
+    user: esignet
