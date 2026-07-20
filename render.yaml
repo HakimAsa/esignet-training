@@ -46,8 +46,13 @@ services:
         value: https://esignet.benin.mosip.net/v1/esignet/oidc/userinfo
       - key: ESIGNET_JWKS_URL
         value: https://esignet.benin.mosip.net/.well-known/jwks.json
+      # Required true against esignet.benin.mosip.net specifically — verified
+      # against a real login, its userinfo signing key doesn't match its
+      # published JWKS, and its userinfo JWT omits iss/aud entirely (see
+      # esignet.service.ts's acceptUnverifiedUserInfo for what's still
+      # enforced despite skipping signature verification).
       - key: ESIGNET_ALLOW_UNVERIFIED_USERINFO
-        value: "false"
+        value: "true"
 
       # Must exactly match what's registered with eSignet as this client's
       # redirect_uri, AND match the frontend's VITE_ESIGNET_REDIRECT_URI

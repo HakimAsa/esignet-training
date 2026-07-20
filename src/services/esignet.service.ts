@@ -147,7 +147,14 @@ export async function verifyIdToken(idToken: string, expectedNonce: string) {
  * integration guide's compatibility-mode requirements:
  *  - transport trust: the endpoint must be HTTPS and same-origin as the issuer
  *  - alg must still be the expected RS256, not something unexpected
- *  - iss/aud continuity, same as the verified path would enforce
+ *  - iss/aud continuity IF those claims are present
+ *
+ * eSignet Benin's real userinfo responses were observed to omit "iss" and
+ * "aud" entirely (unlike its id_tokens, which do include them) — verified
+ * against a real login. So unlike the id_token check, these are only
+ * enforced when present rather than required; the guide's own compatibility
+ * mode assumed they'd always be there, which doesn't match what this
+ * deployment actually sends.
  */
 function acceptUnverifiedUserInfo(jwt: string) {
   const userinfoUrl = new URL(env.ESIGNET_USERINFO_URL);
@@ -162,12 +169,14 @@ function acceptUnverifiedUserInfo(jwt: string) {
   }
 
   const payload = decodeJwt(jwt);
-  if (payload.iss !== env.ESIGNET_ISSUER) {
+  if (payload.iss !== undefined && payload.iss !== env.ESIGNET_ISSUER) {
     throw new AppError(502, "userinfo iss does not match configured issuer");
   }
-  const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-  if (!audiences.includes(env.ESIGNET_CLIENT_ID)) {
-    throw new AppError(502, "userinfo aud does not include this client_id");
+  if (payload.aud !== undefined) {
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!audiences.includes(env.ESIGNET_CLIENT_ID)) {
+      throw new AppError(502, "userinfo aud does not include this client_id");
+    }
   }
 
   return payload;
