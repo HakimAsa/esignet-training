@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 import { env } from "../config/env.js";
 import { FRONTEND_ORIGIN } from "../lib/frontend-origin.js";
@@ -61,14 +62,24 @@ export const oauthCallbackController = {
       await verifyIdToken(idToken, attempt.nonce);
 
       const claims = await fetchUserInfo(accessToken);
+      // Log provenance, never the claim values themselves (per the guide's
+      // observability guidance — logs must localize failures without
+      // becoming a citizen data store).
+      logger.info({ claimsSource: claims.claimsSource }, "eSignet userinfo loaded");
+
+      const email = typeof claims.profile.email === "string" ? claims.profile.email : null;
+      const name = typeof claims.profile.name === "string" ? claims.profile.name : null;
+      const profile = claims.profile as Prisma.InputJsonValue;
 
       // Onboarding: create the local user record on first login, refresh their
       // profile fields on every subsequent one. Keyed on "sub" (the stable
       // eSignet identity), never on email — email may be absent or may change.
+      // "profile" holds every consented claim verbatim, so the dashboard can
+      // display exactly what was shared.
       const user = await prisma.user.upsert({
         where: { sub: claims.sub },
-        create: { sub: claims.sub, email: claims.email ?? null, name: claims.name ?? null },
-        update: { email: claims.email ?? null, name: claims.name ?? null },
+        create: { sub: claims.sub, email, name, profile },
+        update: { email, name, profile },
       });
 
       const sessionToken = await createSessionToken(user.id);
@@ -80,7 +91,9 @@ export const oauthCallbackController = {
         maxAge: SESSION_TTL_SECONDS * 1000,
       });
 
-      res.redirect(FRONTEND_ORIGIN);
+      // /dashboard is the frontend's protected landing page (see
+      // GET /api/auth/me) — matches the ANIP integration guide's convention.
+      res.redirect(`${FRONTEND_ORIGIN}/dashboard`);
     } catch (err) {
       logger.error({ err }, "eSignet callback processing failed");
       redirectWithError(res, "login_failed");

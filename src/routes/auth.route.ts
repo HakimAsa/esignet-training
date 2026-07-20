@@ -5,3 +5,4 @@ export const authRouter = Router();
 
 authRouter.get("/esignet/prepare", authController.prepareEsignetLogin);
 authRouter.get("/esignet/logout", authController.logoutEsignet);
+authRouter.get("/me", authController.me);

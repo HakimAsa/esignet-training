@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createRemoteJWKSet, decodeJwt, importPKCS8, jwtVerify, SignJWT } from "jose";
+import { createRemoteJWKSet, decodeJwt, decodeProtectedHeader, importPKCS8, jwtVerify, SignJWT } from "jose";
 import { env } from "../config/env.js";
 import { AppError } from "../middleware/error-handler.js";
 
@@ -23,8 +23,40 @@ export interface EsignetTokens {
 
 export interface EsignetUserInfo {
   sub: string;
-  email?: string;
-  name?: string;
+  // Whatever claims the user actually consented to (name, picture, birthdate,
+  // gender, phone_number, address, individual_id, ...) — verbatim, not
+  // filtered to a fixed set, so new claim types don't need a code change.
+  profile: Record<string, unknown>;
+  // Where these claims actually came from — "userinfo" means the JWS
+  // signature was cryptographically verified; "userinfo_transport" means the
+  // ESIGNET_ALLOW_UNVERIFIED_USERINFO compatibility mode was used instead
+  // (transport-trust only). Surfacing this lets logs/observability tell the
+  // two apart, per the integration guide's recommendation.
+  claimsSource: "userinfo" | "userinfo_transport";
+}
+
+// JWT/OIDC protocol metadata that rides alongside the actual profile claims
+// in the userinfo payload — excluded so "profile" only ever holds attributes
+// about the person, not token bookkeeping.
+const PROTOCOL_CLAIM_KEYS = new Set([
+  "iss",
+  "sub",
+  "aud",
+  "exp",
+  "nbf",
+  "iat",
+  "jti",
+  "nonce",
+  "at_hash",
+  "c_hash",
+  "auth_time",
+  "acr",
+  "amr",
+  "azp",
+]);
+
+function extractProfile(claims: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(claims).filter(([key]) => !PROTOCOL_CLAIM_KEYS.has(key)));
 }
 
 /**
@@ -108,6 +140,40 @@ export async function verifyIdToken(idToken: string, expectedNonce: string) {
 }
 
 /**
+ * Fallback path for ESIGNET_ALLOW_UNVERIFIED_USERINFO: the userinfo JWS's
+ * signature isn't cryptographically checked (a known eSignet Benin quirk —
+ * its userinfo signing key doesn't match what its own JWKS publishes), but we
+ * still enforce everything checkable without a valid signature, per the ANIP
+ * integration guide's compatibility-mode requirements:
+ *  - transport trust: the endpoint must be HTTPS and same-origin as the issuer
+ *  - alg must still be the expected RS256, not something unexpected
+ *  - iss/aud continuity, same as the verified path would enforce
+ */
+function acceptUnverifiedUserInfo(jwt: string) {
+  const userinfoUrl = new URL(env.ESIGNET_USERINFO_URL);
+  const issuerUrl = new URL(env.ESIGNET_ISSUER);
+  if (userinfoUrl.protocol !== "https:" || userinfoUrl.origin !== issuerUrl.origin) {
+    throw new AppError(502, "userinfo endpoint is not same-origin HTTPS with the issuer — refusing unverified claims");
+  }
+
+  const { alg } = decodeProtectedHeader(jwt);
+  if (alg !== SIGNING_ALG) {
+    throw new AppError(502, `unexpected userinfo alg "${alg}" — refusing unverified claims`);
+  }
+
+  const payload = decodeJwt(jwt);
+  if (payload.iss !== env.ESIGNET_ISSUER) {
+    throw new AppError(502, "userinfo iss does not match configured issuer");
+  }
+  const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  if (!audiences.includes(env.ESIGNET_CLIENT_ID)) {
+    throw new AppError(502, "userinfo aud does not include this client_id");
+  }
+
+  return payload;
+}
+
+/**
  * Fetches OIDC userinfo. eSignet returns this as a signed JWT rather than
  * plain JSON, so by default it's verified against the same JWKS as the
  * id_token. ESIGNET_ALLOW_UNVERIFIED_USERINFO exists only to unblock
@@ -126,7 +192,7 @@ export async function fetchUserInfo(accessToken: string): Promise<EsignetUserInf
   const jwt = await response.text();
 
   const claims = env.ESIGNET_ALLOW_UNVERIFIED_USERINFO
-    ? decodeJwt(jwt)
+    ? acceptUnverifiedUserInfo(jwt)
     : (await jwtVerify(jwt, esignetJwks, { issuer: env.ESIGNET_ISSUER, audience: env.ESIGNET_CLIENT_ID })).payload;
 
   if (typeof claims.sub !== "string" || claims.sub.length === 0) {
@@ -135,7 +201,7 @@ export async function fetchUserInfo(accessToken: string): Promise<EsignetUserInf
 
   return {
     sub: claims.sub,
-    ...(typeof claims.email === "string" ? { email: claims.email } : {}),
-    ...(typeof claims.name === "string" ? { name: claims.name } : {}),
+    profile: extractProfile(claims),
+    claimsSource: env.ESIGNET_ALLOW_UNVERIFIED_USERINFO ? "userinfo_transport" : "userinfo",
   };
 }

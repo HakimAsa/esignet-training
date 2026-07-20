@@ -14,6 +14,12 @@ model User {
   sub       String?  @unique
   email     String?  @unique
   name      String?
+  // Every eSignet claim the user actually consented to (name, picture,
+  // birthdate, gender, phone_number, address, individual_id, ...), verbatim.
+  // Kept generic rather than one column per possible claim, so the dashboard
+  // can display exactly what was shared — no schema change needed when a
+  // client is onboarded for a new claim.
+  profile   Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
