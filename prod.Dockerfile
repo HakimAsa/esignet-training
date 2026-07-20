@@ -9,7 +9,13 @@ RUN npm ci
 FROM deps AS build
 COPY tsconfig.json ./
 COPY src ./src
+COPY public ./public
+COPY docs ./docs
+COPY scripts ./scripts
 RUN npm run build
+# Renders docs/*.md into public/docs/*.html (needs `marked`, a devDependency —
+# hence run here, not in the runtime stage below).
+RUN npm run docs:build
 
 FROM base AS runtime
 ENV NODE_ENV=production
@@ -26,7 +32,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # datasource URL from — only needed now, for `migrate deploy` in the CMD below.
 COPY prisma.config.ts ./
 COPY --from=build /app/dist ./dist
-COPY public ./public
+COPY --from=build /app/public ./public
 
 EXPOSE 3000
 USER node

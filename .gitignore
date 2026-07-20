@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+# Generated from docs/*.md by scripts/build-docs.mjs at Docker build time
+# (see Dockerfile/prod.Dockerfile) — docs/*.md is the source of truth.
+public/docs/
 
 .env
 .env.*.local

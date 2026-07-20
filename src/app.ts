@@ -8,6 +8,7 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
+import { docsRouter } from "./routes/docs.route.js";
 import { oauthCallbackRouter } from "./routes/oauth-callback.route.js";
 import { apiRouter } from "./routes/index.js";
 
@@ -42,6 +43,10 @@ export function createApp() {
   // Not under /api: this must be the exact path (host:port/auth/callback)
   // registered as this client's redirect_uri with eSignet.
   app.use("/auth", oauthCallbackRouter);
+  // Human-facing documentation pages — clean URLs (no .html) served from
+  // pre-built content; see scripts/build-docs.mjs. The raw .html files under
+  // public/docs/ are still reachable directly via express.static above.
+  app.use("/docs", docsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
