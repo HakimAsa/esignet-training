@@ -36,8 +36,10 @@ services:
       # eSignet (MOSIP) OIDC client config — see README.md's "eSignet (MOSIP)
       # login" section. Static endpoint URLs are safe to hardcode (not secret);
       # the client-specific values below must be filled in per environment.
+      # Must exactly match the "iss" claim eSignet actually puts in its
+      # id_tokens (verified against a real one) — not just the bare host.
       - key: ESIGNET_ISSUER
-        value: https://esignet.benin.mosip.net
+        value: https://esignet.benin.mosip.net/v1/esignet
       - key: ESIGNET_TOKEN_URL
         value: https://esignet.benin.mosip.net/v1/esignet/oauth/v2/token
       - key: ESIGNET_USERINFO_URL
