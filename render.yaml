@@ -48,9 +48,15 @@ services:
         value: "false"
 
       # Must exactly match what's registered with eSignet as this client's
-      # redirect_uri — i.e. https://<this-service>.onrender.com/auth/callback
-      # (or your custom domain). Render assigns the .onrender.com URL on first
-      # deploy, so this can only be set for real once that's known.
+      # redirect_uri, AND match the frontend's VITE_ESIGNET_REDIRECT_URI
+      # exactly. This must be the FRONTEND's own origin (e.g.
+      # https://vue-upload-form.onrender.com/auth/callback), not this
+      # backend's — the frontend's nginx proxies /auth/* here server-side, so
+      # the browser never leaves the frontend's origin. Required because
+      # onrender.com is on the Public Suffix List: this backend and the
+      # frontend are different *sites*, so a cookie set via a direct
+      # cross-site call to this backend is third-party and can be dropped by
+      # the browser's tracking protections.
       - key: ESIGNET_REDIRECT_URI
         sync: false
       - key: ESIGNET_CLIENT_ID
