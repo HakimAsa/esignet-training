@@ -14,6 +14,38 @@ function redirectWithError(res: Response, reason: string) {
   res.redirect(`${FRONTEND_ORIGIN}/login?error=${encodeURIComponent(reason)}`);
 }
 
+function isUniqueConstraintError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "P2002";
+}
+
+// eSignet's "sub" is the real identity; email is best-effort profile data that
+// can legitimately repeat across sub values (e.g. shared test identities in
+// the sandbox IdP). If a *different* user already owns this email, drop it
+// rather than fail the whole login — sub-keyed upsert must never 500 over
+// a non-identity field.
+async function upsertEsignetUser(
+  sub: string,
+  email: string | null,
+  name: string | null,
+  profile: Prisma.InputJsonValue,
+) {
+  try {
+    return await prisma.user.upsert({
+      where: { sub },
+      create: { sub, email, name, profile },
+      update: { email, name, profile },
+    });
+  } catch (err) {
+    if (!isUniqueConstraintError(err) || email === null) throw err;
+    logger.warn({ sub }, "eSignet email already belongs to another account; continuing without it");
+    return prisma.user.upsert({
+      where: { sub },
+      create: { sub, email: null, name, profile },
+      update: { name, profile },
+    });
+  }
+}
+
 export const oauthCallbackController = {
   async handle(req: Request, res: Response) {
     // The esignet_oauth cookie (set by GET /api/auth/esignet/prepare) is what
@@ -76,11 +108,7 @@ export const oauthCallbackController = {
       // eSignet identity), never on email — email may be absent or may change.
       // "profile" holds every consented claim verbatim, so the dashboard can
       // display exactly what was shared.
-      const user = await prisma.user.upsert({
-        where: { sub: claims.sub },
-        create: { sub: claims.sub, email, name, profile },
-        update: { email, name, profile },
-      });
+      const user = await upsertEsignetUser(claims.sub, email, name, profile);
 
       const sessionToken = await createSessionToken(user.id);
       res.cookie(SESSION_COOKIE, sessionToken, {
